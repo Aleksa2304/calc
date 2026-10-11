@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earnings Calculator</title>
+<style>
+:root{--bg:#171717;--card:#1f1f1f;--line:#3a3a3a;--tx:#f1f1f1;--mut:#9a9a9a;--pur:#b58ae0;--grn:#4ade80;--bar:#7d6642}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 "Segoe UI",system-ui,sans-serif;padding:24px;max-width:1100px;margin-inline:auto}
+h1{font-size:20px;margin:0 0 2px}h2{font-size:17px;margin:26px 0 10px}
+.sub{color:var(--mut);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1 1 150px}
+.top{display:grid;grid-template-columns:1fr 240px;gap:14px}
+@media(max-width:760px){.top{grid-template-columns:1fr}}
+textarea{width:100%;height:260px;background:#26211a;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:10px;font:12px/1.5 Consolas,monospace;resize:vertical}
+button{background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:7px 16px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--pur)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--pur)}
+.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.head h2{margin:0}
+.lbl{color:var(--mut);font-size:13px}
+.big{font-size:30px;font-weight:700;margin-top:4px}
+.side{display:flex;flex-direction:column;gap:12px}
+.pur{color:var(--pur)}.grn{color:var(--grn)}
+.stat{display:flex;justify-content:space-between;align-items:center}.stat b{font-size:18px}
+.kv{display:flex;justify-content:space-between;font-size:13px;padding:2px 0}.kv span:first-child{color:var(--mut)}
+.card h3{margin:0 0 8px;font-size:13px;color:var(--mut);font-weight:600}
+.set{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.set input{width:70px;background:#26211a;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit}
+.chart{display:flex;align-items:flex-end;gap:10px;height:220px;padding:10px 4px 0;border-bottom:1px solid var(--line)}
+.col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.col i{display:block;width:100%;background:var(--bar);border-radius:4px 4px 0 0;min-height:2px}
+.col small{color:var(--mut);font-size:11px;margin-bottom:3px}
+.xl{display:flex;gap:10px;padding:4px}.xl span{flex:1;text-align:center;color:var(--mut);font-size:12px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px}
+th{color:var(--mut);font-weight:600}td:not(:first-child),th:not(:first-child){text-align:right}
+.err{color:#f87171;font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>Earnings Calculator</h1>
+<p class="sub">Paste your tab-separated transaction data to calculate your earnings per shift</p>
+
+<div class="head"><h2>Transactions</h2><button id="clr">Clear</button></div>
+<div class="top">
+  <div>
+    <textarea id="in" spellcheck="false" placeholder="Paste transactions here (Date, Amount, Fee, Net, then the description line)"></textarea>
+    <div id="err" class="err"></div>
+  </div>
+  <div class="side">
+    <div class="card"><div class="lbl">PPV Total</div><div class="big pur" id="ppv">$0.00</div></div>
+    <div class="card"><div class="lbl">Non-PPV Total</div><div class="big grn" id="non">$0.00</div></div>
+    <div class="card"><div class="lbl">Net Difference</div><div class="big pur" id="diff">$0.00</div></div>
+  </div>
+</div>
+
+<h2>Shift settings</h2>
+<div class="card set">
+  <label>Commission % <input id="pct" type="number" min="0" max="100" step="0.5" value="20"></label>
+  <label>Shift start <input id="s" type="number" min="0" max="23" value="" placeholder="all"></label>
+  <label>Shift end <input id="e" type="number" min="0" max="24" value="" placeholder="all"></label>
+  <span>Your commission (on PPV Total): <b class="pur" id="comm">$0.00</b></span>
+  <span class="lbl">Hours are 24h (e.g. 7 to 12). Leave empty to count everything.</span>
+</div>
+
+<h2>Statistics</h2>
+<div class="row" id="counts"></div>
+<div class="row" style="margin-top:12px">
+  <div class="card"><h3>Tips analysis</h3><div id="tipA"></div></div>
+  <div class="card"><h3>Bundles analysis</h3><div id="bunA"></div></div>
+  <div class="card"><h3>Other revenue (net)</h3><div id="oth"></div></div>
+</div>
+
+<h2>Hourly earnings breakdown (net)</h2>
+<div class="card"><div class="chart" id="chart"></div><div class="xl" id="xl"></div></div>
+
+<h2>Top fans</h2>
+<div class="card"><table><thead><tr><th>Fan</th><th>Payments</th><th>Net</th></tr></thead><tbody id="fans"></tbody></table></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const m=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const num=s=>parseFloat(String(s).replace(/[$,]/g,''))||0;
+const re=/^([A-Za-z]{3} \d{1,2}, \d{4})(\d{1,2}):(\d{2}) ?([ap]m)\s+\$?([\d,.]+)\s+\$?([\d,.]+)\s+\$?([\d,.]+)/i;
+
+function parse(t){
+  const L=t.split(/\r?\n/).map(x=>x.trim()).filter(Boolean),out=[];let bad=0;
+  for(let i=0;i<L.length;i++){
+    const r=L[i].match(re);
+    if(!r){ if(!/^(Payment|Tip|Subscription|Recurring|Post|Stream|Referral|Purchase)/i.test(L[i])) bad++; continue; }
+    let h=+r[2]%12; if(r[4].toLowerCase()=='pm')h+=12;
+    const d=(L[i+1]&&!re.test(L[i+1]))?L[i+1]:'';
+    let type='other';
+    if(/^tip/i.test(d))type='tip';
+    else if(/message/i.test(d))type='bundle';
+    else if(/post/i.test(d))type='post';
+    else if(/stream/i.test(d))type='stream';
+    else if(/subscri/i.test(d))type='sub';
+    const who=(d.match(/(?:from|by)\s+(.+)$/i)||[,'Unknown'])[1].trim();
+    const gross=num(r[5]);
+    // PPV = posts, or any purchase whose price has cents (e.g. $13.99)
+    const ppv=type=='post'||Math.round(gross*100)%100!==0;
+    out.push({h,gross,fee:num(r[6]),net:num(r[7]),type,who,ppv});
+  }
+  return {out,bad};
+}
+const kv=(a,b)=>`<div class="kv"><span>${a}</span><span>${b}</span></div>`;
+function stats(a){
+  if(!a.length)return kv('Average','$0.00')+kv('Total','$0.00')+kv('Minimum','$0.00')+kv('Maximum','$0.00');
+  const v=a.map(x=>x.net),t=v.reduce((p,c)=>p+c,0);
+  return kv('Average',m(t/v.length))+kv('Total',m(t))+kv('Minimum',m(Math.min(...v)))+kv('Maximum',m(Math.max(...v)));
+}
+function calc(){
+  const {out,bad}=parse($('in').value);
+  const s=$('s').value===''?0:+$('s').value, e=$('e').value===''?24:+$('e').value;
+  const d=out.filter(x=>s<e?(x.h>=s&&x.h<e):(x.h>=s||x.h<e));
+  const sum=k=>d.reduce((p,c)=>p+c[k],0);
+  const net=sum('net'),pct=(+$('pct').value||0)/100;
+  // PPV Total = everything; Non-PPV Total = everything except PPV items (posts / prices with cents); Difference = PPV items
+  const posts=d.filter(x=>x.ppv).reduce((p,c)=>p+c.net,0);
+  $('ppv').textContent=m(net);$('non').textContent=m(net-posts);$('diff').textContent=m(posts);
+  $('comm').textContent=m(net*pct);
+  const by=t=>d.filter(x=>x.type==t);
+  const c=[['Bundles',by('bundle').length],['Tips',by('tip').length],['Posts',by('post').length],['Streams',by('stream').length],['Subscriptions',by('sub').length],['Transactions',d.length]];
+  $('counts').innerHTML=c.map(x=>`<div class="card stat"><span class="lbl">${x[0]}</span><b>${x[1]}</b></div>`).join('');
+  $('tipA').innerHTML=stats(by('tip'));$('bunA').innerHTML=stats(by('bundle'));
+  const o=t=>m(by(t).reduce((p,c)=>p+c.net,0));
+  $('oth').innerHTML=kv('Posts',o('post'))+kv('Streams',o('stream'))+kv('Subscriptions',o('sub'))+kv('Other',o('other'));
+  // hourly chart
+  const hs=[...new Set(d.map(x=>x.h))].sort((a,b)=>a-b);
+  if(hs.length){const f=hs[0],l=hs[hs.length-1];hs.length=0;for(let h=f;h<=l;h++)hs.push(h);}
+  const hv=hs.map(h=>d.filter(x=>x.h==h).reduce((p,c)=>p+c.net,0)),mx=Math.max(1,...hv);
+  $('chart').innerHTML=hv.map(v=>`<div class="col"><small>${v?m(v):''}</small><i style="height:${v/mx*85}%"></i></div>`).join('')||'<span class="lbl">No data yet</span>';
+  $('xl').innerHTML=hs.map(h=>`<span>${h%12||12} ${h<12?'AM':'PM'}</span>`).join('');
+  // fans
+  const f={};d.forEach(x=>{(f[x.who]=f[x.who]||{n:0,t:0});f[x.who].n++;f[x.who].t+=x.net;});
+  $('fans').innerHTML=Object.entries(f).sort((a,b)=>b[1].t-a[1].t).slice(0,10)
+    .map(([k,v])=>`<tr><td></td><td>${v.n}</td><td>${m(v.t)}</td></tr>`).join('');
+  [...$('fans').rows].forEach((r,i)=>r.cells[0].textContent=Object.entries(f).sort((a,b)=>b[1].t-a[1].t)[i][0]);
+  $('err').textContent=bad?`${bad} line(s) could not be read and were skipped.`:'';
+  try{localStorage.setItem('ec_pct',$('pct').value)}catch(_){}
+}
+try{const p=localStorage.getItem('ec_pct');if(p)$('pct').value=p}catch(_){}
+['in','pct','s','e'].forEach(i=>$(i).addEventListener('input',calc));
+$('clr').onclick=()=>{$('in').value='';calc()};
+calc();
+</script>
+</body>
+</html>
